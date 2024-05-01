@@ -10,25 +10,37 @@ class Event:
     def __init__(self, name, duration, done):
         self.name = name
         self.duration = duration
-        self.done = done
+        self.__done = done
+    
+    def is_done(self):
+        return self.__done
 
-class Alarm:
+    def set_done(self, value):
+        if isinstance(value, bool):
+            self.__done = value
+        else:
+            raise ValueError("Значение должно быть булевым (True или False)")
+
+class Manager:
     def __init__(self):
         self.events = []
         self.events_final = []
-        self.running = False  # Переменная для отслеживания состояния будильника
 
+    def add_event(self, event):
+        # Добавляет событие в массив событий
+        self.events.append(event)
+    
     def load_parameters(self, file_name):
         print("Загрузка параметров из файла...")
         with open(file_name, 'r', encoding='utf-8') as file:
             for line in file:
                 name, duration = line.strip().split(': ')
                 event = Event(name, int(duration), False)
-                self.events.append(event)
+                self.add_event(event)
         print("Загрузка параметров завершена.")
         print("Загружено {} событий".format(len(self.events)))
         for e in self.events:
-            print(e.name, e.duration, e.done)
+            print(e.name, e.duration, e.is_done())
 
     def generate_events(self, num_events):
         print(f"Генерация {num_events} случайных событий...")
@@ -45,7 +57,14 @@ class Alarm:
         # вывод окончательно отсортированного списка событий
         print("Окончательный список событий:")
         for event, start_time in self.events_final:
-            print(f"Событие '{event.name}' начнется в {time.strftime('%H:%M:%S', time.localtime(start_time))} '{event.duration}' закончилось - '{event.done}'")
+            print(f"Событие '{event.name}' начнется в {time.strftime('%H:%M:%S', time.localtime(start_time))} '{event.duration}' закончилось - '{event.is_done()}'")
+
+class Alarm:
+    def __init__(self, events):
+        # self.events = []
+        self.events_final = events
+        self.running = False  # Переменная для отслеживания состояния будильника
+
 
     def start(self, gui):  # добавляем параметр gui
         self.running = True  # Установим флаг, что будильник включен
@@ -69,12 +88,12 @@ class Alarm:
                         return
                     time.sleep(1)
             else:
-                event.done = True
+                event.set_done(True)
                 return
 
         # создание и запуск потока для каждого события
         for i in range(len(self.events_final)):
-            if not self.events_final[i][0].done:
+            if not self.events_final[i][0].is_done():
                 event_thread = threading.Thread(target=event_tracking, args=(self.events_final[i],))
                 event_thread.start()
 
@@ -102,10 +121,11 @@ class GUI:
         self.show_events_button = tk.Button(root, text="Показать события", command=self.show_events)
         self.show_events_button.pack()
 
-        self.alarm = Alarm()
-        self.alarm.load_parameters('parameters.txt')  # загрузка параметров из файла
-        self.alarm.generate_events(20)  # генерация 20 случайных событий
+        self.manager = Manager()
+        self.manager.load_parameters('parameters.txt')  # загрузка параметров из файла
+        self.manager.generate_events(20)  # генерация 20 случайных событий
 
+        self.alarm = Alarm(self.manager.events_final)
         self.update_clock()
 
     def update_clock(self):
@@ -115,7 +135,7 @@ class GUI:
 
     def notify_event_start(self, event):
         event_label = tk.Label(self.events_frame, text=f"Началось событие '{event.name}'")
-        event.done = True
+        event.set_done(True)
         event_label.pack(side="top", padx=5)  # размещаем сообщение о событии
 
         remaining_time_label = tk.Label(self.events_frame, text=f"Осталось времени: {event.duration} сек.")
@@ -159,9 +179,9 @@ class GUI:
         for event, start_time in self.alarm.events_final:
             start_time_str = time.strftime('%H:%M:%S', time.localtime(start_time))
             end_time_str = time.strftime('%H:%M:%S', time.localtime(start_time + event.duration))
-            status = "Прошло" if event.done else "Не прошло"
+            status = "Прошло" if event.is_done() else "Не прошло"
             # Вставляем данные события в таблицу
-            if event.done:
+            if event.is_done():
                 events_tree.insert("", "end", values=(event.name, start_time_str, end_time_str, status),
                                    tags=("passed_event",))
             else:
@@ -173,8 +193,8 @@ class GUI:
             for event, start_time in self.alarm.events_final:
                 start_time_str = time.strftime('%H:%M:%S', time.localtime(start_time))
                 end_time_str = time.strftime('%H:%M:%S', time.localtime(start_time + event.duration))
-                status = "Прошло" if event.done else "Не прошло"
-                if event.done:
+                status = "Прошло" if event.is_done() else "Не прошло"
+                if event.is_done():
                     events_tree.insert("", "end", values=(event.name, start_time_str, end_time_str, status),
                                        tags=("passed_event",))
                 else:

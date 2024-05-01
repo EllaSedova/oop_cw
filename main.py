@@ -5,27 +5,29 @@ import tkinter as tk
 
 
 class Event:
-    def __init__(self, name, duration):
+    def __init__(self, name, duration, done):
         self.name = name
         self.duration = duration
+        self.done = done
 
 
 class Alarm:
     def __init__(self):
         self.events = []
         self.events_final = []
+        self.running = False  # Переменная для отслеживания состояния будильника
 
     def load_parameters(self, file_name):
         print("Загрузка параметров из файла...")
         with open(file_name, 'r', encoding='utf-8') as file:
             for line in file:
                 name, duration = line.strip().split(': ')
-                event = Event(name, int(duration))
+                event = Event(name, int(duration), False)
                 self.events.append(event)
         print("Загрузка параметров завершена.")
         print("Загружено {} событий".format(len(self.events)))
         for e in self.events:
-            print(e.name, e.duration)
+            print(e.name, e.duration, e.done)
 
     def generate_events(self, num_events):
         print(f"Генерация {num_events} случайных событий...")
@@ -41,30 +43,44 @@ class Alarm:
         # вывод окончательно отсортированного списка событий
         print("Окончательный список событий:")
         for event, start_time in self.events_final:
-            print(f"Событие '{event.name}' начнется в {time.strftime('%H:%M:%S', time.localtime(start_time))} '{event.duration}'")
+            print(f"Событие '{event.name}' начнется в {time.strftime('%H:%M:%S', time.localtime(start_time))} '{event.duration}' закончилось - '{event.done}'")
 
     def start(self, gui):  # добавляем параметр gui
-        def event_tracking(event, event_start_time):
+        self.running = True  # Установим флаг, что будильник включен
+
+        def event_tracking(event_final):
+            event, event_start_time = event_final  # Распаковываем кортеж
             event_end_time = event_start_time + event.duration
             print(
                 f"Событие '{event.name}' начнется в {time.strftime('%H:%M:%S', time.localtime(event_start_time))} и закончится в {time.strftime('%H:%M:%S', time.localtime(event_end_time))}")
 
             # ожидание до начала события
             while time.time() < event_start_time:
+                if not self.running:  # Проверяем, выключен ли будильник
+                    return
                 time.sleep(1)
-
-            gui.notify_event_start(event)  # показать уведомление о начале события
-
-            # ожидание до окончания события
-            while time.time() < event_end_time:
-                time.sleep(1)
-
-            gui.notify_event_end(event.name)  # показать уведомление о завершении события
+            print(event_start_time)
+            print(time.time())
+            if event_start_time >= time.time()-1 and event_start_time <= time.time()+1:
+                gui.notify_event_start(event)  # показать уведомление о начале события
+                event.done = True
+                # ожидание до окончания события
+                while time.time() < event_end_time:
+                    if not self.running:  # Проверяем, выключен ли будильник
+                        return
+                    time.sleep(1)
+            else:
+                event.done = True
+                return
 
         # создание и запуск потока для каждого события
-        for event, event_start_time in self.events_final:
-            event_thread = threading.Thread(target=event_tracking, args=(event, event_start_time))
-            event_thread.start()
+        for i in range(len(self.events_final)):
+            if not self.events_final[i][0].done:
+                event_thread = threading.Thread(target=event_tracking, args=(self.events_final[i],))
+                event_thread.start()
+
+    def stop(self):
+        self.running = False  # Устанавливаем флаг, что будильник выключен
 
 
 class GUI:
@@ -72,16 +88,20 @@ class GUI:
         self.root = root
         self.root.title("Alarm GUI")
 
-        self.clock_label = tk.Label(root, font=('Helvetica', 48))
+        self.clock_label = tk.Label(root, font=('Helvetica', 48), bg="white")  # Устанавливаем начальный фон за часами
         self.clock_label.pack(pady=20)
 
         self.events_frame = tk.Frame(root)
         self.events_frame.pack(pady=20)
 
+        # Добавляем кнопку для включения/выключения будильника
+        self.clock_label.config(bg="red")  # Изменяем цвет фона за часами
+        self.toggle_button = tk.Button(root, text="Включить", command=self.toggle_alarm)
+        self.toggle_button.pack()
+
         self.alarm = Alarm()
         self.alarm.load_parameters('parameters.txt')  # загрузка параметров из файла
         self.alarm.generate_events(20)  # генерация 20 случайных событий
-        self.alarm.start(self)  # начало отслеживания событий с передачей экземпляра GUI
 
         self.update_clock()
 
@@ -107,9 +127,17 @@ class GUI:
             remaining_time_label.after(1000, update_timer)  # обновить таймер через 1 секунду
 
         update_timer()  # запустить таймер при старте события
-    def notify_event_end(self, event_name):
-        event_label = tk.Label(self.events_frame, text=f"Закончилось событие '{event_name}'")
-        event_label.pack()
+
+
+    def toggle_alarm(self):
+        if self.alarm.running:
+            self.alarm.stop()  # Если будильник включен, выключаем его
+            self.clock_label.config(bg="red")  # Изменяем цвет фона за часами
+            self.toggle_button.config(text="Включить")  # Изменяем текст кнопки
+        else:
+            self.alarm.start(self)  # Если будильник выключен, включаем его
+            self.clock_label.config(bg="green")  # Изменяем цвет фона за часами
+            self.toggle_button.config(text="Выключить")  # Изменяем текст кнопки
 
 
 def main():

@@ -12,6 +12,7 @@ class Event:
         self.duration = duration
         self.done = done
 
+
 class Alarm:
     def __init__(self):
         self.events = []
@@ -45,7 +46,8 @@ class Alarm:
         # вывод окончательно отсортированного списка событий
         print("Окончательный список событий:")
         for event, start_time in self.events_final:
-            print(f"Событие '{event.name}' начнется в {time.strftime('%H:%M:%S', time.localtime(start_time))} '{event.duration}' закончилось - '{event.done}'")
+            print(
+                f"Событие '{event.name}' начнется в {time.strftime('%H:%M:%S', time.localtime(start_time))} '{event.duration}' закончилось - '{event.done}'")
 
     def start(self, gui):  # добавляем параметр gui
         self.running = True  # Установим флаг, что будильник включен
@@ -61,7 +63,7 @@ class Alarm:
                 if not self.running:  # Проверяем, выключен ли будильник
                     return
                 time.sleep(1)
-            if event_start_time >= time.time()-1 and event_start_time <= time.time()+1:
+            if event_start_time >= time.time() - 1 and event_start_time <= time.time() + 1:
                 gui.notify_event_start(event)  # показать уведомление о начале события
                 # ожидание до окончания события
                 while time.time() < event_end_time:
@@ -82,8 +84,8 @@ class Alarm:
         self.running = False  # Устанавливаем флаг, что будильник выключен
 
 
-class GUI:
-    def __init__(self, root):
+class MainWindow:
+    def __init__(self, root, alarm):
         self.root = root
         self.root.title("Alarm GUI")
 
@@ -92,19 +94,17 @@ class GUI:
 
         self.events_frame = tk.Frame(root)
         self.events_frame.pack(pady=20)
-
+        self.alarm = alarm
         # Добавляем кнопку для включения/выключения будильника
         self.clock_label.config(bg="red")  # Изменяем цвет фона за часами
         self.toggle_button = tk.Button(root, text="Включить", command=self.toggle_alarm)
         self.toggle_button.pack()
 
-        # Добавляем кнопку для открытия списка событий
-        self.show_events_button = tk.Button(root, text="Показать события", command=self.show_events)
-        self.show_events_button.pack()
+        self.eventWindow = EventsList(self.root, self.alarm)
 
-        self.alarm = Alarm()
-        self.alarm.load_parameters('parameters.txt')  # загрузка параметров из файла
-        self.alarm.generate_events(20)  # генерация 20 случайных событий
+        # Добавляем кнопку для открытия списка событий
+        self.show_events_button = tk.Button(root, text="Показать события", command=self.eventWindow.show_events)
+        self.show_events_button.pack()
 
         self.update_clock()
 
@@ -142,6 +142,24 @@ class GUI:
             self.clock_label.config(bg="green")  # Изменяем цвет фона за часами
             self.toggle_button.config(text="Выключить")  # Изменяем текст кнопки
 
+
+class EventsList:
+    def __init__(self, root, alarm):
+        self.alarm = alarm
+        self.root = root
+
+    def insert_data(self, events_tree):
+        for event, start_time in self.alarm.events_final:
+            start_time_str = time.strftime('%H:%M:%S', time.localtime(start_time))
+            end_time_str = time.strftime('%H:%M:%S', time.localtime(start_time + event.duration))
+            status = "Прошло" if event.done else "Не прошло"
+            # Вставляем данные события в таблицу
+            if event.done:
+                events_tree.insert("", "end", values=(event.name, start_time_str, end_time_str, status),
+                                   tags=("passed_event",))
+            else:
+                events_tree.insert("", "end", values=(event.name, start_time_str, end_time_str, status))
+
     def show_events(self):
         events_window = tk.Toplevel(self.root)
         events_window.title("Список событий")
@@ -156,29 +174,12 @@ class GUI:
         # Создаем тег стиля для строки с событием, имеющим статус "Прошло"
         events_tree.tag_configure("passed_event", background="#FFDDDD")  # бледно красный цвет
 
-        for event, start_time in self.alarm.events_final:
-            start_time_str = time.strftime('%H:%M:%S', time.localtime(start_time))
-            end_time_str = time.strftime('%H:%M:%S', time.localtime(start_time + event.duration))
-            status = "Прошло" if event.done else "Не прошло"
-            # Вставляем данные события в таблицу
-            if event.done:
-                events_tree.insert("", "end", values=(event.name, start_time_str, end_time_str, status),
-                                   tags=("passed_event",))
-            else:
-                events_tree.insert("", "end", values=(event.name, start_time_str, end_time_str, status))
+        self.insert_data(events_tree)
 
         def update_events_list():
             for event in events_tree.get_children():
                 events_tree.delete(event)
-            for event, start_time in self.alarm.events_final:
-                start_time_str = time.strftime('%H:%M:%S', time.localtime(start_time))
-                end_time_str = time.strftime('%H:%M:%S', time.localtime(start_time + event.duration))
-                status = "Прошло" if event.done else "Не прошло"
-                if event.done:
-                    events_tree.insert("", "end", values=(event.name, start_time_str, end_time_str, status),
-                                       tags=("passed_event",))
-                else:
-                    events_tree.insert("", "end", values=(event.name, start_time_str, end_time_str, status))
+            self.insert_data(events_tree)
 
         update_events_list()
 
@@ -188,9 +189,14 @@ class GUI:
 
         refresh_events_list()
 
+
 def main():
+    alarm = Alarm()
+    alarm.load_parameters('parameters.txt')  # загрузка параметров из файла
+    alarm.generate_events(20)  # генерация 20 случайных событий
+
     root = tk.Tk()
-    gui = GUI(root)
+    gui = MainWindow(root, alarm)
     root.mainloop()
 
 

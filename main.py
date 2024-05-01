@@ -1,7 +1,9 @@
+import copy
 import random
 import threading
 import time
 import tkinter as tk
+from tkinter import ttk
 
 
 class Event:
@@ -9,7 +11,6 @@ class Event:
         self.name = name
         self.duration = duration
         self.done = done
-
 
 class Alarm:
     def __init__(self):
@@ -33,9 +34,10 @@ class Alarm:
         print(f"Генерация {num_events} случайных событий...")
         for _ in range(num_events):
             event = random.choice(self.events)
+            event_copy = copy.deepcopy(event)  # Создаем глубокую копию события
             start_time_offset = random.randint(0, 360)  # случайное время от 0 до 1 минуты
             event_start_time = time.time() + start_time_offset  # время начала события
-            self.events_final.append((event, event_start_time))  # сохранение события и времени начала
+            self.events_final.append((event_copy, event_start_time))  # сохранение копии события и времени начала
         print("Генерация событий завершена.")
 
         # сортировка событий по времени начала
@@ -59,11 +61,8 @@ class Alarm:
                 if not self.running:  # Проверяем, выключен ли будильник
                     return
                 time.sleep(1)
-            print(event_start_time)
-            print(time.time())
             if event_start_time >= time.time()-1 and event_start_time <= time.time()+1:
                 gui.notify_event_start(event)  # показать уведомление о начале события
-                event.done = True
                 # ожидание до окончания события
                 while time.time() < event_end_time:
                     if not self.running:  # Проверяем, выключен ли будильник
@@ -99,6 +98,10 @@ class GUI:
         self.toggle_button = tk.Button(root, text="Включить", command=self.toggle_alarm)
         self.toggle_button.pack()
 
+        # Добавляем кнопку для открытия списка событий
+        self.show_events_button = tk.Button(root, text="Показать события", command=self.show_events)
+        self.show_events_button.pack()
+
         self.alarm = Alarm()
         self.alarm.load_parameters('parameters.txt')  # загрузка параметров из файла
         self.alarm.generate_events(20)  # генерация 20 случайных событий
@@ -112,22 +115,22 @@ class GUI:
 
     def notify_event_start(self, event):
         event_label = tk.Label(self.events_frame, text=f"Началось событие '{event.name}'")
+        event.done = True
         event_label.pack(side="top", padx=5)  # размещаем сообщение о событии
 
         remaining_time_label = tk.Label(self.events_frame, text=f"Осталось времени: {event.duration} сек.")
         remaining_time_label.pack(side="top")  # размещаем таймер события
 
-        def update_timer():
-            event.duration -= 1
-            remaining_time_label.config(text=f"Осталось времени: {event.duration} сек.")
-            if event.duration <= 0:
+        def update_timer(duration):
+            duration -= 1
+            remaining_time_label.config(text=f"Осталось времени: {duration} сек.")
+            if duration <= 0:
                 event_label.pack_forget()  # скрыть сообщение о событии
                 remaining_time_label.pack_forget()  # скрыть таймер
                 return
-            remaining_time_label.after(1000, update_timer)  # обновить таймер через 1 секунду
+            remaining_time_label.after(1000, update_timer, duration)  # обновить таймер через 1 секунду
 
-        update_timer()  # запустить таймер при старте события
-
+        update_timer(event.duration)  # запустить таймер при старте события
 
     def toggle_alarm(self):
         if self.alarm.running:
@@ -139,6 +142,51 @@ class GUI:
             self.clock_label.config(bg="green")  # Изменяем цвет фона за часами
             self.toggle_button.config(text="Выключить")  # Изменяем текст кнопки
 
+    def show_events(self):
+        events_window = tk.Toplevel(self.root)
+        events_window.title("Список событий")
+
+        columns = ("Название", "Время начала", "Время окончания", "Статус")
+        events_tree = ttk.Treeview(events_window, columns=columns, show="headings")
+        events_tree.pack(fill="both", expand=True)
+        # Устанавливаем заголовки для столбцов
+        for col in columns:
+            events_tree.heading(col, text=col)
+
+        # Создаем тег стиля для строки с событием, имеющим статус "Прошло"
+        events_tree.tag_configure("passed_event", background="#FFDDDD")  # бледно красный цвет
+
+        for event, start_time in self.alarm.events_final:
+            start_time_str = time.strftime('%H:%M:%S', time.localtime(start_time))
+            end_time_str = time.strftime('%H:%M:%S', time.localtime(start_time + event.duration))
+            status = "Прошло" if event.done else "Не прошло"
+            # Вставляем данные события в таблицу
+            if event.done:
+                events_tree.insert("", "end", values=(event.name, start_time_str, end_time_str, status),
+                                   tags=("passed_event",))
+            else:
+                events_tree.insert("", "end", values=(event.name, start_time_str, end_time_str, status))
+
+        def update_events_list():
+            for event in events_tree.get_children():
+                events_tree.delete(event)
+            for event, start_time in self.alarm.events_final:
+                start_time_str = time.strftime('%H:%M:%S', time.localtime(start_time))
+                end_time_str = time.strftime('%H:%M:%S', time.localtime(start_time + event.duration))
+                status = "Прошло" if event.done else "Не прошло"
+                if event.done:
+                    events_tree.insert("", "end", values=(event.name, start_time_str, end_time_str, status),
+                                       tags=("passed_event",))
+                else:
+                    events_tree.insert("", "end", values=(event.name, start_time_str, end_time_str, status))
+
+        update_events_list()
+
+        def refresh_events_list():
+            update_events_list()
+            events_window.after(1000, refresh_events_list)
+
+        refresh_events_list()
 
 def main():
     root = tk.Tk()

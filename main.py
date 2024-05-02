@@ -25,7 +25,7 @@ class Event:
 class Manager:
     def __init__(self):
         self.events = []
-        self.events_final = []
+        #self.events_final = []
 
     def add_event(self, event):
         # Добавляет событие в массив событий
@@ -44,24 +44,26 @@ class Manager:
             print(e.name, e.duration, e.is_done())
 
     def generate_events(self, num_events):
+        events_final = []
         print(f"Генерация {num_events} случайных событий...")
         for _ in range(num_events):
             event = random.choice(self.events)
             event_copy = copy.deepcopy(event)  # Создаем глубокую копию события
             start_time_offset = random.randint(0, 360)  # случайное время от 0 до 1 минуты
             event_start_time = time.time() + start_time_offset  # время начала события
-            self.events_final.append((event_copy, event_start_time))  # сохранение копии события и времени начала
+            events_final.append((event_copy, event_start_time))  # сохранение копии события и времени начала
         print("Генерация событий завершена.")
 
         # сортировка событий по времени начала
-        self.events_final.sort(key=lambda x: x[1])
+        events_final.sort(key=lambda x: x[1])
         # вывод окончательно отсортированного списка событий
         # todo убрать потом (только для логов)
         print("Окончательный список событий:")
-        for event, start_time in self.events_final:
+        for event, start_time in events_final:
             print(
                 f"Событие '{event.name}' начнется в {time.strftime('%H:%M:%S', time.localtime(start_time))} "
                 f"'{event.duration}' закончилось - '{event.is_done()}'")
+        return events_final
 
 
 class Alarm:
@@ -122,7 +124,7 @@ class MainWindow:
         self.toggle_button = tk.Button(root, text="Включить", command=self.toggle_alarm)
         self.toggle_button.pack()
 
-        self.eventWindow = EventsList(self.root, self.alarm)
+        self.eventWindow = EventsListWindow(self.root, self.alarm)
 
         # Добавляем кнопку для открытия списка событий
         self.show_events_button = tk.Button(root, text="Показать события", command=self.eventWindow.show_events)
@@ -165,7 +167,7 @@ class MainWindow:
             self.toggle_button.config(text="Выключить")  # Изменяем текст кнопки
 
 
-class EventsList:
+class EventsListWindow:
     def __init__(self, root, alarm):
         self.alarm = alarm
         self.root = root
@@ -215,9 +217,9 @@ class EventsList:
 def main():
     manager = Manager()
     manager.load_parameters('parameters.txt')  # загрузка параметров из файла
-    manager.generate_events(20)  # генерация 20 случайных событий
+    events_final = manager.generate_events(20)  # генерация 20 случайных событий
 
-    alarm = Alarm(manager.events_final)
+    alarm = Alarm(events_final)
 
     root = tk.Tk()
     MainWindow(root, alarm)
